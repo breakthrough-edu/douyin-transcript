@@ -2,9 +2,11 @@
 # douyin-transcript :: ensure a local WhisperKit large-v3 CoreML model exists.
 #
 # Scans the common model locations first; only downloads when explicitly asked
-# (--download), because the model is ~1.5 GB. Downloads the EXACT snapshot the
-# skill is tuned on (openai_whisper-large-v3-v20240930) from Hugging Face via
-# whisperkit-cli, the same way meeting-scribe does.
+# (--download), because the model is ~1.5 GB. Downloads the EXACT snapshot the skill
+# is tuned on (openai_whisper-large-v3-v20240930) from Hugging Face. NOTE: whisperkit-cli
+# has no standalone download command -- the model is fetched as a side effect of
+# `transcribe`, which REQUIRES an audio path, so we feed it a 1s silent WAV (built with
+# ffmpeg). The model lands nested under <dir>/models/argmaxinc/whisperkit-coreml/<name>.
 #
 # Usage:
 #   ensure-model.sh                  # scan only      -> MODEL_PATH=<dir> | MODEL_NOT_FOUND
@@ -49,7 +51,7 @@ find_model() {
       d="$(dirname "$enc")"; base="$(basename "$d")"
       [ "$base" = "$WANT_EXACT" ] && exact="$d"
       case "$base" in *large-v3*) [ -z "$any" ] && any="$d";; esac
-    done < <(find "$root" -maxdepth 4 -type d -name AudioEncoder.mlmodelc 2>/dev/null)
+    done < <(find "$root" -maxdepth 7 -type d -name AudioEncoder.mlmodelc 2>/dev/null | grep -v '/\.cache/')
   done
   if [ -n "$exact" ]; then printf '%s' "$exact"; return 0; fi
   if [ -n "$any" ];   then printf '%s' "$any";   return 0; fi
@@ -69,20 +71,26 @@ fi
 
 # --- download (only on explicit --download) ---
 command -v whisperkit-cli >/dev/null 2>&1 || { echo "MISSING_TOOL=whisperkit-cli"; exit 3; }
+command -v ffmpeg >/dev/null 2>&1 || { echo "MISSING_TOOL=ffmpeg"; exit 3; }
 mkdir -p "$DL_DIR"
 LOG="$DL_DIR/.download.log"
-# whisperkit-cli fetches the model when given --download-model-path; it errors on the
-# missing audio path AFTER the download, so we ignore its exit code and verify by file.
-# (No --model-prefix: the default already yields openai_whisper-<model>, matching the
-# proven meeting-scribe form; the post-download find below tolerates either naming.)
-whisperkit-cli transcribe --model "$WANT" \
-  --download-model-path "$DL_DIR" >"$LOG" 2>&1 || true
+: >"$LOG"
+# whisperkit-cli has no standalone "download" command: the model is fetched as a side
+# effect of `transcribe` when --model is given without --model-path. transcribe REQUIRES
+# an audio path, so feed it a 1s silent WAV; the model lands under --download-model-path.
+# We ignore whisperkit's exit code (transcribing silence may warn) and verify by file.
+SILENCE="$DL_DIR/.silence.wav"
+ffmpeg -y -f lavfi -i anullsrc=r=16000:cl=mono -t 1 -ar 16000 -ac 1 "$SILENCE" >>"$LOG" 2>&1 || true
+whisperkit-cli transcribe --audio-path "$SILENCE" --model "$WANT" \
+  --download-model-path "$DL_DIR" >>"$LOG" 2>&1 || true
+rm -f "$SILENCE"
 
-# Locate what landed: prefer the exact snapshot, else any large-v3 bundle.
-RESULT="$(find "$DL_DIR" -maxdepth 5 -type d -name AudioEncoder.mlmodelc 2>/dev/null \
-  | sed 's#/AudioEncoder.mlmodelc$##' | grep -F "$WANT_EXACT" | head -1 || true)"
-[ -z "$RESULT" ] && RESULT="$(find "$DL_DIR" -maxdepth 5 -type d -name AudioEncoder.mlmodelc 2>/dev/null \
-  | sed 's#/AudioEncoder.mlmodelc$##' | grep large-v3 | head -1 || true)"
+# Locate what landed (ignore the HF .cache/ staging copies): prefer the exact snapshot,
+# else any large-v3 bundle.
+RESULT="$(find "$DL_DIR" -maxdepth 7 -type d -name AudioEncoder.mlmodelc 2>/dev/null \
+  | grep -v '/\.cache/' | sed 's#/AudioEncoder.mlmodelc$##' | grep -F "$WANT_EXACT" | head -1 || true)"
+[ -z "$RESULT" ] && RESULT="$(find "$DL_DIR" -maxdepth 7 -type d -name AudioEncoder.mlmodelc 2>/dev/null \
+  | grep -v '/\.cache/' | sed 's#/AudioEncoder.mlmodelc$##' | grep large-v3 | head -1 || true)"
 
 if [ -n "$RESULT" ] && [ -d "$RESULT/AudioEncoder.mlmodelc" ]; then
   echo "MODEL_PATH=$RESULT"
