@@ -5,6 +5,8 @@ description: Turn a Douyin (抖音) video link into a clean, readable Chinese ma
 
 # Douyin Transcript -- 抖音链接 → 干净中文逐字稿
 
+> **Superseded by `social-video-transcript`** (`npx skills add breakthrough-edu/social-video-transcript`) -- same engine, now also Xiaohongshu / Instagram / Facebook / TikTok with auto-detected language. Still works for Douyin; prefer the successor for new installs.
+
 ## What this skill does
 
 Given a Douyin link (or pasted share-text), produce a readable Chinese transcript and save it as one markdown file:

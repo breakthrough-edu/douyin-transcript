@@ -1,5 +1,11 @@
 # douyin-transcript
 
+> [!NOTE]
+> **Superseded by [`social-video-transcript`](https://github.com/breakthrough-edu/social-video-transcript)** -- same local-Whisper engine, now covering Douyin **+ Xiaohongshu (小红书) + Instagram + Facebook + TikTok**, with auto-detected language. This repo still works, but new work happens there:
+> ```bash
+> npx skills add breakthrough-edu/social-video-transcript
+> ```
+
 Turn a **Douyin (抖音)** video link into a clean, readable **Chinese markdown transcript** -- fully local, free, on Apple Silicon macOS.
 
 Paste a Douyin link (or the full `复制打开抖音…` share text). The skill downloads the video, transcribes it locally with **Whisper large-v3** on the Apple Neural Engine, light-cleans the raw speech-to-text into readable prose (fixing the homophone / proper-noun mistakes Chinese Whisper makes, using the video's own title as context), and saves one `.md` file. Nothing leaves your machine.
